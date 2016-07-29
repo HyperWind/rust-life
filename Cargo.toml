@@ -1,0 +1,8 @@
+[package]
+name = "game_of_life"
+version = "0.1.0"
+authors = ["Karolis Lasys <karolioofficial@outlook.com>"]
+
+[dependencies]
+termion = "1.0.3"
+getopts = "0.2"
