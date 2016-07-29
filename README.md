@@ -17,7 +17,7 @@ You can load life 1.06 compatable files by using the `-l` flag.<br>
 ex.:<br>
 `$ rust-life -l glider.lif`
 
-To change time it takes for one tick to pass use the `-t` flag.<br>
+To change the time it takes for one tick to pass use the `-t` flag.<br>
 ex.:<br>
 `$ rust-life -t 0.3`
 
@@ -42,7 +42,7 @@ That's it.
  
 ### license:
 
-Copyright (c) 2016 Karolis Lasys <karolioofficial@outlook.com>
+Copyright (c) 2016 Karolis Lasys \<<karolioofficial@outlook.com>\>
 <br><br>
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 <br><br>
