@@ -41,24 +41,21 @@ enum InputAction {
 
 fn count_neighbors(x: i64, y: i64, cells: &HashSet<Cell>) -> u32 {
 
-    let mut cell_vec: Vec<Cell> = Vec::new();
+    let mut neighbor_counter: u32 = 0;
     
     for iy in y-1..y+2 {
         for ix in x-1..x+2 {
-            if ix != x || iy != y { 
-                cell_vec.push(Cell { x: ix, y: iy});
+            if ix != x || iy != y {
+                let buffer_cell =  Cell { x: ix, y: iy};
+                neighbor_counter = match cells.contains(&buffer_cell) {
+                    true => neighbor_counter + 1,
+                    false => neighbor_counter
+                };
             }
         }
     }
 
-    cell_vec.iter()
-        .fold(0,
-              |sum, v|
-              match cells.contains(&v) {
-                  true => sum + 1,
-                  false => sum
-              }
-        )
+    neighbor_counter
 
 }
 
