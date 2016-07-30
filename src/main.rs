@@ -14,7 +14,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use getopts::Options;
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 struct Cell {
     x: i64,
     y: i64
@@ -39,23 +39,24 @@ enum InputAction {
     None
 }
 
-fn check_nearby(x: i64, y: i64, cells: &HashSet<Cell>) -> u32 {
+fn count_neighbors(x: i64, y: i64, cells: &HashSet<Cell>) -> u32 {
 
-    cells
-        .iter()
+    let mut cell_vec: Vec<Cell> = Vec::new();
+    
+    for iy in y-1..y+2 {
+        for ix in x-1..x+2 {
+            if ix != x || iy != y { 
+                cell_vec.push(Cell { x: ix, y: iy});
+            }
+        }
+    }
+
+    cell_vec.iter()
         .fold(0,
               |sum, v|
-              if v.x <= x+1  &&
-                  v.x >= x-1 &&
-                  v.y <= y+1 &&
-                  v.y >= y-1 {
-                  if v.y == y && v.x == x {
-                      sum
-                  } else {
-                      sum + 1
-                  }
-              } else {
-                  sum
+              match cells.contains(&v) {
+                  true => sum + 1,
+                  false => sum
               }
         )
 
@@ -120,16 +121,18 @@ fn step(cells: &mut HashSet<Cell>, cell_lives: &HashSet<u32>, new_cell: &HashSet
     
     for cell in cells.iter() {
 
-        let neighbors: u32 = check_nearby(cell.x, cell.y, &cells);
+        let neighbors: u32 = count_neighbors(cell.x, cell.y, &cells);
         
         if cell_lives.contains(&neighbors) {
             new_cells.insert(Cell { x: cell.x, y: cell.y });
         }
 
-        for (&x, &y) in [cell.y-1, cell.y, cell.y+1].iter().zip([cell.x-1, cell.x, cell.x+1].iter()) {
-            let neighbors: u32 = check_nearby(x, y, &cells);
-            if new_cell.contains(&neighbors) {
-                new_cells.insert(Cell { x: x, y: y });
+        for y in cell.y-1..cell.y+2 {
+            for x in cell.x-1..cell.x+2 {
+                let neighbors: u32 = count_neighbors(x, y, &cells);
+                if new_cell.contains(&neighbors) {
+                    new_cells.insert(Cell { x: x, y: y });
+                }
             }
         }
 
