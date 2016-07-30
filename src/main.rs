@@ -14,7 +14,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use getopts::Options;
 
-#[derive(PartialEq, Eq, Hash, Debug)]
+#[derive(PartialEq, Eq, Hash)]
 struct Cell {
     x: i64,
     y: i64
@@ -46,10 +46,11 @@ fn count_neighbors(x: i64, y: i64, cells: &HashSet<Cell>) -> u32 {
     for iy in y-1..y+2 {
         for ix in x-1..x+2 {
             if ix != x || iy != y {
-                let buffer_cell =  Cell { x: ix, y: iy};
-                neighbor_counter = match cells.contains(&buffer_cell) {
-                    true => neighbor_counter + 1,
-                    false => neighbor_counter
+                let buffer_cell =  Cell { x: ix, y: iy };
+                neighbor_counter = if cells.contains(&buffer_cell) { 
+                    neighbor_counter + 1
+                } else {
+                    neighbor_counter
                 };
             }
         }
@@ -64,47 +65,47 @@ fn process_input(queue: &Arc<Mutex<Vec<InputAction>>>,
                  action: Action,
                  offset: &mut (i64, i64)) -> Action {
 
-    let mut retval: Action = action;
+    let mut retval: Action = action.clone();
     let mut q = queue.lock().unwrap();
     
     q.reverse();
-    while q.len() != 0 {
+    while !q.is_empty() {
         
-        match q.pop().unwrap() {
+        retval = match q.pop().unwrap() {
             InputAction::KeyDownLeft => {
                 offset.0 -= 1;
-                retval = Action::Update;
+                Action::Update
             }
             InputAction::KeyDownRight => {
                 offset.0 += 1;
-                retval = Action::Update;
+                Action::Update
             }
             InputAction::KeyDownUp => {
                 offset.1 -= 1;
-                retval = Action::Update;
+                Action::Update
             }
             InputAction::KeyDownDown => {
                 offset.1 += 1;
-                retval = Action::Update;
+                Action::Update
             }
             InputAction::KeyDown(' ') => {
-                retval = if retval == Action::Nothing {
+                if retval == Action::Nothing {
                     Action::Pause
                 } else {
                     Action::Nothing
-                };
+                }
             },
             InputAction::KeyDown('q') => {
-                retval = Action::Quit;
+                Action::Quit
             },
             InputAction::MouseClick(x, y) => {
                 let new_cell = Cell { x: (x as i64) - 1 + offset.0, y: (y as i64) - 1 + offset.1 };
                 if !cells.remove(&new_cell) { 
                     cells.insert(new_cell);
                 }
-                retval = Action::Update;
+                Action::Update
             },
-            _ => ()
+            _ => action.clone()
         }
     }
 
@@ -118,7 +119,7 @@ fn step(cells: &mut HashSet<Cell>, cell_lives: &HashSet<u32>, new_cell: &HashSet
     
     for cell in cells.iter() {
 
-        let neighbors: u32 = count_neighbors(cell.x, cell.y, &cells);
+        let neighbors: u32 = count_neighbors(cell.x, cell.y, cells);
         
         if cell_lives.contains(&neighbors) {
             new_cells.insert(Cell { x: cell.x, y: cell.y });
@@ -126,7 +127,7 @@ fn step(cells: &mut HashSet<Cell>, cell_lives: &HashSet<u32>, new_cell: &HashSet
 
         for y in cell.y-1..cell.y+2 {
             for x in cell.x-1..cell.x+2 {
-                let neighbors: u32 = count_neighbors(x, y, &cells);
+                let neighbors: u32 = count_neighbors(x, y, cells);
                 if new_cell.contains(&neighbors) {
                     new_cells.insert(Cell { x: x, y: y });
                 }
@@ -183,7 +184,12 @@ fn display<W: Write>(stdout: &mut W,
         }
     }
 
-    write!(stdout, "{}{}{}Generation: {}{}", color::Fg(color::White), cursor::Goto(2, h), style::Bold, gen, style::Reset).unwrap();
+    write!(stdout,
+           "{}{}{}Generation: {}{}",
+           color::Fg(color::White),
+           cursor::Goto(2, h),
+           style::Bold, gen,
+           style::Reset).unwrap();
     
     stdout.flush().unwrap();
     
@@ -216,17 +222,16 @@ fn setup<W: Write>(stdout: &mut W,
         'outer: loop {
             let stdin = io::stdin();
             for e in stdin.events() {
-                let mut pushval: InputAction = InputAction::None;
-                match e.unwrap() {
-                    Event::Key(Key::Left) => pushval = InputAction::KeyDownLeft,
-                    Event::Key(Key::Right) => pushval = InputAction::KeyDownRight,
-                    Event::Key(Key::Up) => pushval = InputAction::KeyDownUp,
-                    Event::Key(Key::Down) => pushval = InputAction::KeyDownDown,
-                    Event::Key(Key::Char(' ')) => pushval = InputAction::KeyDown(' '),
-                    Event::Key(Key::Char('q')) => pushval = InputAction::KeyDown('q'),
-                    Event::Mouse(MouseEvent::Press(MouseButton::Left, x, y)) => pushval = InputAction::MouseClick(x, y),
-                    _ => ()
-                }
+                let pushval = match e.unwrap() {
+                    Event::Key(Key::Left) => InputAction::KeyDownLeft,
+                    Event::Key(Key::Right) => InputAction::KeyDownRight,
+                    Event::Key(Key::Up) => InputAction::KeyDownUp,
+                    Event::Key(Key::Down) => InputAction::KeyDownDown,
+                    Event::Key(Key::Char(' ')) => InputAction::KeyDown(' '),
+                    Event::Key(Key::Char('q')) => InputAction::KeyDown('q'),
+                    Event::Mouse(MouseEvent::Press(MouseButton::Left, x, y)) => InputAction::MouseClick(x, y),
+                    _ => InputAction::None
+                };
                 if pushval != InputAction::None {
                     let mut q = queue.lock().unwrap();
                     q.push(pushval.clone());
@@ -252,13 +257,13 @@ fn parse_for_hashset(opt: Option<String>, set: &mut HashSet<u32>) {
 
     if let Some(x) = opt {
         let mut buf: HashSet<u32> = HashSet::new();
-        for v in x.trim().split(",") {
+        for v in x.trim().split(',') {
             match v.parse::<u32>() {
                 Ok(n) => buf.insert(n),
                 Err(_) => false
             };
         }
-        if buf.len() > 0 {
+        if !buf.is_empty() {
             *set = buf.drain().collect();
         }
     }
@@ -320,21 +325,20 @@ fn set_vars_from_opts(tick_time: &mut f32,
     parse_for_hashset(matches.opt_str("s"), cell_lives);
 
     if let Some(x) = matches.opt_str("l") {
-        let fname = x.clone();
-        let f = try!(File::open(x).map_err(|e| {
-                println!("Couldn't open file \"{}\", error: {}", fname, e); 
+        let f = try!(File::open(x.clone()).map_err(|e| {
+                println!("Couldn't open file \"{}\", error: {}", x, e); 
         }));
         let reader = BufReader::new(f);
         for line in reader.lines() {
             if let Ok(l) = line {
                 let vals: Vec<&str> = l
                     .trim_right()
-                    .split(" ")
+                    .split(' ')
                     .filter(|&v| v.parse::<i64>().is_ok())
                     .collect();
                 if vals.len() >= 2 {
-                    match (vals[0].parse::<i64>(),vals[1].parse::<i64>()) {
-                        (Ok(x),Ok(y)) => {
+                    match (vals[0].parse::<i64>(), vals[1].parse::<i64>()) {
+                        (Ok(x), Ok(y)) => {
                             cells.insert(Cell { x: x, y: y });
                         },
                         _ => continue
