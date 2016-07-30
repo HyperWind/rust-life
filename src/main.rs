@@ -126,15 +126,7 @@ fn step(cells: &mut HashSet<Cell>, cell_lives: &HashSet<u32>, new_cell: &HashSet
             new_cells.insert(Cell { x: cell.x, y: cell.y });
         }
 
-        let mut zipped: Vec<(i64, i64)> = Vec::new();
-        
-        for y in [cell.y-1, cell.y, cell.y+1].iter() {
-            for x in [cell.x-1, cell.x, cell.x+1].iter() {
-                zipped.push((*x, *y));
-            }
-        }
-
-        for (x, y) in zipped {
+        for (&x, &y) in [cell.y-1, cell.y, cell.y+1].iter().zip([cell.x-1, cell.x, cell.x+1].iter()) {
             let neighbors: u32 = check_nearby(x, y, &cells);
             if new_cell.contains(&neighbors) {
                 new_cells.insert(Cell { x: x, y: y });
@@ -143,11 +135,7 @@ fn step(cells: &mut HashSet<Cell>, cell_lives: &HashSet<u32>, new_cell: &HashSet
 
     }
 
-    cells.clear();
-    for cell in new_cells {
-        cells.insert(cell);
-    }
-    
+    *cells = new_cells.drain().collect();
 }
 
 fn display<W: Write>(stdout: &mut W,
@@ -158,10 +146,7 @@ fn display<W: Write>(stdout: &mut W,
                      bw: &mut u16,
                      bh: &mut u16) {
     
-    let (w, h) = match terminal_size() {
-        Ok(a) => a,
-        Err(_) => (50, 30)
-    };
+    let (w, h) = terminal_size().unwrap_or_else(|_| (50,30));
 
     if *bw != w && *bh != h {
         print_background(stdout, &w, &h);
@@ -233,23 +218,13 @@ fn setup<W: Write>(stdout: &mut W,
             for e in stdin.events() {
                 let mut pushval: InputAction = InputAction::None;
                 match e.unwrap() {
-                    Event::Key(k) => {
-                        match k {
-                            Key::Left => pushval = InputAction::KeyDownLeft,
-                            Key::Right => pushval = InputAction::KeyDownRight,
-                            Key::Up => pushval = InputAction::KeyDownUp,
-                            Key::Down => pushval = InputAction::KeyDownDown,
-                            Key::Char(' ') => pushval = InputAction::KeyDown(' '),
-                            Key::Char('q') => pushval = InputAction::KeyDown('q'),
-                            _ => ()
-                        }
-                    },
-                    Event::Mouse(m) => {
-                        match m {
-                            MouseEvent::Press(MouseButton::Left, x, y) => pushval = InputAction::MouseClick(x, y),
-                            _ => ()
-                            }
-                    },
+                    Event::Key(Key::Left) => pushval = InputAction::KeyDownLeft,
+                    Event::Key(Key::Right) => pushval = InputAction::KeyDownRight,
+                    Event::Key(Key::Up) => pushval = InputAction::KeyDownUp,
+                    Event::Key(Key::Down) => pushval = InputAction::KeyDownDown,
+                    Event::Key(Key::Char(' ')) => pushval = InputAction::KeyDown(' '),
+                    Event::Key(Key::Char('q')) => pushval = InputAction::KeyDown('q'),
+                    Event::Mouse(MouseEvent::Press(MouseButton::Left, x, y)) => pushval = InputAction::MouseClick(x, y),
                     _ => ()
                 }
                 if pushval != InputAction::None {
@@ -275,23 +250,17 @@ fn setup<W: Write>(stdout: &mut W,
 
 fn parse_for_hashset(opt: Option<String>, set: &mut HashSet<u32>) {
 
-    match opt {
-        Some(x) => {
-            let mut buf: HashSet<u32> = HashSet::new();
-            for v in x.trim().split(",") {
-                match v.parse::<u32>() {
-                    Ok(n) => buf.insert(n),
-                    Err(_) => false
-                };
-            }
-            if buf.len() > 0 {
-                set.clear();
-                for v in buf {
-                    set.insert(v);
-                }
-            }
+    if let Some(x) = opt {
+        let mut buf: HashSet<u32> = HashSet::new();
+        for v in x.trim().split(",") {
+            match v.parse::<u32>() {
+                Ok(n) => buf.insert(n),
+                Err(_) => false
+            };
         }
-        None => ()
+        if buf.len() > 0 {
+            *set = buf.drain().collect();
+        }
     }
     
 }
@@ -299,7 +268,7 @@ fn parse_for_hashset(opt: Option<String>, set: &mut HashSet<u32>) {
 fn set_vars_from_opts(tick_time: &mut f32,
                       cells: &mut HashSet<Cell>,
                       new_cell: &mut HashSet<u32>,
-                      cell_lives: &mut HashSet<u32>) -> bool {
+                      cell_lives: &mut HashSet<u32>) -> Result<(),()> {
 
     let args: Vec<String> = env::args().collect();
     let prog = args[0].clone();
@@ -323,13 +292,9 @@ fn set_vars_from_opts(tick_time: &mut f32,
                 "loads a life 1.06 compatable file [optional]",
                 "FILE");
 
-    let matches = match opts.parse(&args[1..]) {
-        Ok(v) => v,
-        Err(e) => {
-            println!("{}", e.to_string());
-            return true;
-        }
-    };
+    let matches = try!(opts.parse(&args[1..]).map_err(|e| {
+        println!("{}", e.to_string());
+    }));
     
     if matches.opt_present("h") {
         let whitespace = String::from(" ");
@@ -341,72 +306,45 @@ fn set_vars_from_opts(tick_time: &mut f32,
             whitespace.chars().cycle().take(15).collect::<String>()
         );
         println!("{}", opts.usage(&usg));
-        return true;
+        return Err(());
     }
 
-    match matches.opt_str("t") {
-        Some(x) => {
-            match x.trim().parse::<f32>() {
-                Ok(v) => *tick_time = v,
-                Err(e) => {
-                    println!("{}", e.to_string());
-                    return true;
-                }
-            }
-        },
-        None => ()
+    if let Some(x) = matches.opt_str("t") {
+        *tick_time = try!(x.trim().parse::<f32>().map_err(|e| {
+            println!("{}", e.to_string());
+        }));
     }
 
     parse_for_hashset(matches.opt_str("n"), new_cell);
 
     parse_for_hashset(matches.opt_str("s"), cell_lives);
 
-    match matches.opt_str("l") {
-        Some(x) => {
-            let fname = x.clone();
-            match File::open(x) {
-                Ok(f) => {
-                    let reader = BufReader::new(f);
-                    for line in reader.lines() {
-                        match line {
-                            Ok(l) => {
-                                let vals: Vec<&str> = l
-                                    .trim_right()
-                                    .split(" ")
-                                    .filter(|&v| match v.parse::<i64>() {
-                                        Ok(_) => true,
-                                        Err(_) => false
-                                    })
-                                    .collect();
-                                if vals.len() >= 2 {
-                                    let x: i64;
-                                    let y: i64;
-                                    match vals[0].parse::<i64>() {
-                                        Ok(v) => x = v,
-                                        Err(_) => continue
-                                    }
-                                    match vals[1].parse::<i64>() {
-                                        Ok(v) => y = v,
-                                        Err(_) => continue
-                                    }
-                                    cells.insert(Cell { x: x, y: y });
-                                }
-                            },
-                            Err(_) => ()
-                        }
+    if let Some(x) = matches.opt_str("l") {
+        let fname = x.clone();
+        let f = try!(File::open(x).map_err(|e| {
+                println!("Couldn't open file \"{}\", error: {}", fname, e); 
+        }));
+        let reader = BufReader::new(f);
+        for line in reader.lines() {
+            if let Ok(l) = line {
+                let vals: Vec<&str> = l
+                    .trim_right()
+                    .split(" ")
+                    .filter(|&v| v.parse::<i64>().is_ok())
+                    .collect();
+                if vals.len() >= 2 {
+                    match (vals[0].parse::<i64>(),vals[1].parse::<i64>()) {
+                        (Ok(x),Ok(y)) => {
+                            cells.insert(Cell { x: x, y: y });
+                        },
+                        _ => continue
                     }
-                },
-                Err(e) => {
-                    println!("Couldn't open file \"{}\", error: {}", fname, e); 
-                    return true;
                 }
             }
-        },
-        None => ()
+        }
     }
     
-    false
-    
+    Ok(())
 }
 
 fn main() {
@@ -422,7 +360,7 @@ fn main() {
     let mut tick_timer = time::SystemTime::now();
     let mut tick_time: f32 = 0.3;
     let queue: Arc<Mutex<Vec<InputAction>>> = Arc::new(Mutex::new(Vec::new()));
-    if set_vars_from_opts(&mut tick_time, &mut cells, &mut new_cell, &mut cell_lives) {
+    if let Err(()) = set_vars_from_opts(&mut tick_time, &mut cells, &mut new_cell, &mut cell_lives) {
         return;
     }
     let mut stdout = MouseTerminal::from(io::stdout().into_raw_mode().unwrap());
